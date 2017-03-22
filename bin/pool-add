@@ -1,0 +1,60 @@
+#!/bin/bash 
+
+POOL_TOOL_ROOT=~/long-dead-fred/builds
+PROGNAME="$(basename $0)"
+PROVIDER=""
+PROJECT=""
+ZONE=""
+
+function errmsg {
+	error=$1 ; shift
+	echo "$PROGNAME: $@" 1>&2
+	[[ $error -ne 0 ]] && exit $error
+}
+
+function usage {
+	error=$1 ; shift
+	(
+		[[ $1 != "" ]] && errmsg 0 "$1"
+		echo "usage:"
+		echo "$PROGNAME <pool> <template> <instance>"
+	) 1>&2
+	[[ $error -ne 0 ]] && exit $error
+}
+
+# parse options 
+while getopts "hj" arg; do
+	case $arg in
+		h)
+			usage 0
+			exit 0
+			;;
+	esac
+done
+shift $((OPTIND-1))
+
+POOL=$1  ; TEMPLATE=$2 ; INSTANCE=$3
+[[ $POOL == "" || $TEMPLATE = "" || $INSTANCE = "" ]] && usage 1 "You must provide required details to build instance" 
+
+# read in POOL environment
+[[ -r "$POOL_TOOL_ROOT/pools/$POOL.env" ]] || errmsg 1 "POOL name '$POOL' is invalid" 
+echo "Reading env for pool '$POOL'"
+. $POOL_TOOL_ROOT/pools/$POOL.env
+[[ $PROVIDER == "" ]] && errmsg 1 "PROVIDER not defined in POOL named" 
+[[ $PROJECT == "" ]] && errmsg 1 "PROJECT not defined in POOL named" 
+[[ $ZONE == "" ]] && errmsg 1 "ZONE not defined in POOL named"
+
+#read in TEMPLATE environment
+TDIR=$POOL_TOOL_ROOT/templates/$TEMPLATE/$PROVIDER
+[[ -d "$TDIR" ]] || errmsg 1 "template/platform directory '$TEMPLATE/$PROVIDER' does not exist"
+[[ -r "$TDIR/env" ]] || errmsg 1 "template/platform 'env' file for '$TEMPLATE/$PROVIDER' does not exists"
+echo "Reading env for template '$TEMPLATE/$PROVIDER'"
+. $TDIR/env
+
+# standup instance
+[[ -r "$TDIR/standup.bash" ]] || errmsg 1 "standup script for '$TEMPLATE/$PROVIDER' does not exist"
+. $TDIR/standup.bash
+[[ $? = 0 ]] || errmsg $? "failed to standup instance"
+
+exit 0
+

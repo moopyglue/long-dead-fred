@@ -1,0 +1,53 @@
+#!/bin/bash
+
+export CTAG_ON="\033[01;35m"
+export CTAG_OFF="\033[01;00m"
+
+cat $@ | awk -v TMP=/tmp/build.$$ -v COLS=$COLS '
+
+	BEGIN {
+		scripts=0
+		buffer=""
+		COLS=80
+		result=0
+	} 
+
+	function print_header(f) {
+		system("echo ; echo \"${CTAG_ON}[" (scripts - 1) "] $(/bin/date)\" ")
+		system("cat " f)
+		system("echo \"${CTAG_OFF}\" ")
+	}
+
+	function run_script(f,s) {
+
+		print s > f ; close(f)
+		system("chmod 700 " f)
+
+		print_header(f)
+		system(f " ; echo $? > " f ".result")
+		cmd="cat " f ".result" ; cmd | getline result ; close(cmd)
+		system("/bin/date")
+		system("/bin/rm " f " " f ".result 2>/dev/null")
+		if( result > 0 ) {
+			print "\nRESULT=" result "\nExiting...\n"
+			exit 
+		}
+	}
+
+	/^#!/ {
+		if( result == 0 && scripts++ > 0 ) run_script(TMP,buffer)
+		buffer=$0
+		header=""
+		next
+	}
+
+	scripts==0 { next }
+
+	/^#=/ { header = header $0 "\n" }
+	{ buffer = buffer "\n" $0 }
+
+	END {
+		if( result == 0 && scripts++ > 0 ) run_script(TMP,buffer)
+	}
+'
+
